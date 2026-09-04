@@ -1,30 +1,30 @@
-# lm-workbench
+# LM Workbench
 
 All-in-one MCP server for LM Studio. File operations, bash, git, search, web, tasks, memory, and skills — in a single lightweight toolkit.
 
-**One server. One MCP entry. Everything a local LLM agent needs to do real work.**
-
 ## Where it came from
 
-**lm-workbench** is a consolidated derivative of two open-source MCP projects that were originally being used together:
+**LM Workbench** is a consolidated derivative of two open-source MCP projects that were originally being used together:
 
 ### qwen3-mcp
 
 [**qwen3-mcp**](https://github.com/marduk191/qwen3_mcp) by **marduk191** provided the core agent tooling used by lm-workbench.
 
-The original project grew into a broad MCP server for LM Studio with filesystem, bash, Git, search, editing, web, tasks, skills, and numerous specialized modules.
+Their toolkit is very robust, but also contained tools I had never used and probably won't with what I do with LLMs
 
-lm-workbench retains the core tools most useful for everyday local LLM agent work while removing specialized modules that are not part of the curated toolkit.
+LM Workbench retains the core tools most useful for what I do with it, while removing the tools I don't use. 
+
+**Less tools = less tokens at the beginning = more work done**
 
 ### mnemonic-mcp
 
-[**mnemonic-mcp**](https://github.com/c1hucktay4lors/mnemonic-mcp) provided the persistent memory system and context-status functionality.
+I created [**mnemonic-mcp**](https://github.com/c1hucktay4lors/mnemonic-mcp) to give models ran in LM studio access to a simple, long-term memory storage location. 
 
-It adds file-based long-term memory, scratchpads, memory organization, and the ability to read LM Studio's conversation data to report actual context usage.
+It adds file-based long-term memory, memory organization, and the **ability to read LM Studio's conversation data to report actual context usage** so that the model can determine what to do next with the context it has.
 
 ### The merge
 
-lm-workbench combines the core working set from qwen3-mcp with the mnemonic-mcp memory system into a single MCP server.
+LM Workbench combines the core working set from qwen3-mcp with the mnemonic-mcp memory system into a single MCP server.
 
 The result:
 
@@ -34,15 +34,13 @@ The result:
 - Scratchpads for short-term state
 - Real LM Studio context-status reporting
 - Filesystem, shell, Git, search, editing, web, tasks, and skills
-- ~62 focused tools instead of 100+
+- ~62 focused tools instead of ~141
 - No TypeScript or build step
 - No extra runtime dependencies beyond the MCP SDK
 
-The specialized modules from qwen3-mcp — including ComfyUI, notebook, media, planning, thinking, interaction, blog, and summarization tools — are intentionally not included.
+The specialized modules from qwen3-mcp — including ComfyUI, notebook, media, planning, thinking, interaction, blog, and summarization tools — are intentionally not included, as I/the models I use never used them.
 
 ## What it does
-
-One stdio MCP server providing a local LLM agent with a complete everyday development and automation toolchain.
 
 | Module | Tools | What it covers |
 |---|---:|---|
@@ -77,7 +75,7 @@ Structured long-term memory stored in:
 
 Memory supports sections, keyword-based categorization, deduplication, backup rotation, searching, and cleanup.
 
-The `context_status` tool reads LM Studio's actual conversation files to report real token usage rather than estimating it.
+The `context_status` tool reads LM Studio's actual conversation files to report real token usage rather than estimating it (this is a bit spotty on if the model calls it naturally, still working on it. but does work if you tell it to check context status).
 
 ## Skills system
 
@@ -177,14 +175,14 @@ lm-workbench/
 ## Requirements
 
 - Node.js 18+
-- LM Studio
+- LM Studio (have not tried others yet, but I believe most tools will work, minus the `context_status` one)
 - An MCP-compatible local LLM
 
 No build step is required.
 
 ## Tested models
 
-Models that have been used with lm-workbench:
+Models that have been used with LM Workbenche's OG toolkits, and theoretically should work with this:
 
 - Qwen3.5-9B
 - Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP
@@ -192,7 +190,6 @@ Models that have been used with lm-workbench:
 - Qwen3.8-27B
 - Qwen3.6-40B-Fable-Fusion-6-Core-Deckard-Eleanor-Heretic-Uncensored-NM-DAU-NEO-MAX-MTP
 
-This list is a living one. If you've run lm-workbench with a model that works well, add it.
 
 ## License
 
@@ -200,7 +197,7 @@ MIT
 
 ## Credits
 
-lm-workbench would not exist in its current form without the work of the projects it was derived from.
+LM Workbench would not exist in its current form without the work of the projects it was derived from.
 
 - **qwen3-mcp** — https://github.com/marduk191/qwen3_mcp
 - **mnemonic-mcp** — https://github.com/c1hucktay4lors/mnemonic-mcp
