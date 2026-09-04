@@ -1,10 +1,10 @@
 # LM Workbench
 
-All-in-one MCP server for LM Studio. File operations, bash, git, search, web, tasks, memory, and skills — in a single lightweight toolkit.
+All-in-one MCP server for LM Studio. File operations, bash, git, search, web, tasks, memory, and skills — in a single toolkit.
 
 ## Where it came from
 
-**LM Workbench** is a consolidated derivative of two open-source MCP projects that were originally being used together:
+**LM Workbench** is a consolidated derivative of two projects that i was using together:
 
 ### qwen3-mcp
 
@@ -12,15 +12,11 @@ All-in-one MCP server for LM Studio. File operations, bash, git, search, web, ta
 
 Their toolkit is very robust, but also contained tools I had never used and probably won't with what I do with LLMs
 
-LM Workbench retains the core tools most useful for what I do with it, while removing the tools I don't use. 
-
-**Less tools = less tokens at the beginning = more work done**
-
 ### mnemonic-mcp
 
-I created [**mnemonic-mcp**](https://github.com/c1hucktay4lors/mnemonic-mcp) to give models ran in LM studio access to a simple, long-term memory storage location. 
+I created [**mnemonic-mcp**](https://github.com/c1hucktay4lors/mnemonic-mcp) to give models I ran in LM studio access to a simple, long-term memory storage location. 
 
-It adds file-based long-term memory, memory organization, and the **ability to read LM Studio's conversation data to report actual context usage** so that the model can determine what to do next with the context it has.
+It adds a file-based long-term memory, memory organization, and the **ability to read LM Studio's conversation data to report actual context usage** so that the model can determine what to do next with the context it has.
 
 ### The merge
 
