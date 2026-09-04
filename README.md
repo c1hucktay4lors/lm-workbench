@@ -16,7 +16,7 @@ and
 
 Their toolkit is very robust, but also contained tools I had never used and probably won't with what I do with LLMs, so I wanted to remove them to slim it down.
 
-I created [**mnemonic-mcp**](https://github.com/c1hucktay4lors/mnemonic-mcp) to give models I run in LM studio access to a simple, long-term memory storage location and the **ability to read LM Studio's conversation data to report actual context usage** so that the model can determine what to do next with the context it has.
+I created **mnemonic-mcp** to give models I run in LM studio access to a simple, long-term memory storage location and the **ability to read LM Studio's conversation data to report actual context usage** so that the model can determine what to do next with the context it has.
 
 The result of my trimming and additions is a toolkit that has:
 
