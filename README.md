@@ -1,84 +1,111 @@
 # lm-workbench
 
-All-in-one MCP server for LM Studio. File ops, bash, git, search, web, tasks, memory, and skills — in a single lightweight toolkit.
+All-in-one MCP server for LM Studio. File operations, bash, git, search, web, tasks, memory, and skills — in a single lightweight toolkit.
 
-One server. ~62 tools. Everything a local LLM agent needs to do real work.
-
----
+**One server. One MCP entry. Everything a local LLM agent needs to do real work.**
 
 ## Where it came from
 
-lm-workbench is a consolidation of two separate MCP servers that were running alongside each other in LM Studio:
+**lm-workbench** is a consolidated derivative of two open-source MCP projects that were originally being used together:
 
 ### qwen3-mcp
 
-The original toolkit, built for driving Qwen3 models locally. Started as a focused file/bash/git server and grew to 18 modules with 100+ tools, pulling in notebook editing, media reading, ComfyUI workflow management, GitHub blog deployment, structured thinking/planning, and more.
+[**qwen3-mcp**](https://github.com/marduk191/qwen3_mcp) by **marduk191** provided the core agent tooling used by lm-workbench.
 
-It worked, but the tool list got heavy. Every tool definition injected into the prompt adds tokens. For daily coding work, most of those specialized modules sat unused while eating context budget.
+The original project grew into a broad MCP server for LM Studio with filesystem, bash, Git, search, editing, web, tasks, skills, and numerous specialized modules.
+
+lm-workbench retains the core tools most useful for everyday local LLM agent work while removing specialized modules that are not part of the curated toolkit.
 
 ### mnemonic-mcp
 
-A separate TypeScript MCP server ([c1hucktay4lors/mnemonic-mcp](https://github.com/c1hucktay4lors/mnemonic-mcp)) — also built here — that added persistent long-term memory. Stored everything in a single markdown file with `## Section` headers, with 11 tools for reading, saving, searching, categorizing, and tidying memory entries. Also included a `context_status` tool that reads LM Studio's own conversation JSON files to report exact token usage.
+[**mnemonic-mcp**](https://github.com/c1hucktay4lors/mnemonic-mcp) provided the persistent memory system and context-status functionality.
 
-It was a TypeScript project using the high-level `McpServer` class and zod schemas — clean but another server process, another entry in mcp.json, another set of tool definitions to manage.
-
-The memory logic in this project (`src/tools/memory-mn.js`) is a plain-JS port of that server, preserving the same file format, behavior, and tool names.
+It adds file-based long-term memory, scratchpads, memory organization, and the ability to read LM Studio's conversation data to report actual context usage.
 
 ### The merge
 
-lm-workbench takes the **core working set** from qwen3-mcp (filesystem, bash, git, search, edit, web, tasks, skills) and **ports the mnemonic server** to plain JS, merging it in as a single module. Result:
+lm-workbench combines the core working set from qwen3-mcp with the mnemonic-mcp memory system into a single MCP server.
 
-- One server instead of two
-- One entry in `~/.lmstudio/mcp.json` instead of two
-- Same memory file, same scratchpads, same behavior — just fewer moving parts
-- ~62 tools instead of ~110+, reducing prompt overhead
-- No TypeScript, no build step, no extra dependencies beyond the MCP SDK
+The result:
 
-The specialized modules (ComfyUI, notebook, media, planning, thinking, interaction, blog, summarize) are **not** included. If you need them, they still exist in the original qwen3-mcp project and can be copied in.
+- **One server instead of two**
+- **One MCP configuration entry instead of two**
+- Persistent long-term memory
+- Scratchpads for short-term state
+- Real LM Studio context-status reporting
+- Filesystem, shell, Git, search, editing, web, tasks, and skills
+- ~62 focused tools instead of 100+
+- No TypeScript or build step
+- No extra runtime dependencies beyond the MCP SDK
 
----
+The specialized modules from qwen3-mcp — including ComfyUI, notebook, media, planning, thinking, interaction, blog, and summarization tools — are intentionally not included.
 
 ## What it does
 
-One stdio MCP server that gives your local LLM agent the full toolchain for autonomous work:
+One stdio MCP server providing a local LLM agent with a complete everyday development and automation toolchain.
 
 | Module | Tools | What it covers |
-|--------|-------|----------------|
-| **Filesystem** | 10 | Read, write, list, create, delete, move, copy, stat, working dir |
-| **Shell** | 6 | Run commands, background sessions, read/kill output |
-| **Git** | 10 | Status, diff, log, add, commit, branch, checkout, push, pull, clone |
-| **Search** | 3 | Glob patterns, grep with context, find definitions |
-| **Edit** | 5 | String replace, insert line, replace lines, append, prepend |
-| **Web** | 2 | DuckDuckGo search, fetch + strip HTML |
-| **Tasks** | 7 | Todo tracking with file persistence |
-| **Scratchpad** | 3 | Short-term notes that persist between sessions |
-| **Memory** | 11 | Long-term memory: read, save, search, sections, categorize, tidy, context status |
-| **Skills** | 3 | List, load, and install instruction packages from GitHub |
+|---|---:|---|
+| Filesystem | 10 | Read, write, list, create, delete, move, copy, stat, working directory |
+| Shell | 6 | Run commands, background sessions, read/kill output |
+| Git | 10 | Status, diff, log, add, commit, branch, checkout, push, pull, clone |
+| Search | 3 | Glob patterns, grep with context, find definitions |
+| Edit | 5 | String replace, insert line, replace lines, append, prepend |
+| Web | 2 | DuckDuckGo search, fetch + strip HTML |
+| Tasks | 7 | Todo tracking with file persistence |
+| Scratchpad | 3 | Short-term notes that persist between sessions |
+| Memory | 11 | Long-term memory, search, organization, and context status |
+| Skills | 3 | List, load, and install instruction packages from GitHub |
 
-### Memory system
+## Memory system
 
-Two tiers of memory, both file-based:
+Two tiers of file-based memory are provided.
 
-- **Scratchpad** (`~/.lmstudio-mcp-memory/scratchpad_*.txt`) — quick working notes, planning scratch, intermediate state. Named pads, append or overwrite.
-- **Persistent memory** (`~/.mcp-memory/memory.md`) — structured long-term memory in a single markdown file. Sections with `## headers`, keyword-based categorization on save, deduplication, backup rotation, and a `context_status` tool that reads LM Studio's actual conversation files to report real token usage (not estimates).
+### Scratchpad
 
-### Skills system
+Short-term working notes for planning, intermediate state, and temporary information.
 
-Skills are instruction packages — a `SKILL.md` file with step-by-step instructions for specialized tasks (document generation, code review, frontend patterns, etc.). They live in a `skills/` directory and the agent loads them on demand via `load_skill`.
+Stored under:
 
-Install new skills directly from GitHub:
+`~/.lmstudio-mcp-memory/`
 
-```
+### Persistent memory
+
+Structured long-term memory stored in:
+
+`~/.mcp-memory/memory.md`
+
+Memory supports sections, keyword-based categorization, deduplication, backup rotation, searching, and cleanup.
+
+The `context_status` tool reads LM Studio's actual conversation files to report real token usage rather than estimating it.
+
+## Skills system
+
+Skills are instruction packages containing a `SKILL.md` file with step-by-step instructions for specialized tasks.
+
+They live in the `skills/` directory and can be loaded on demand.
+
+Skills can also be installed directly from GitHub:
+
+```text
 install_skill → "https://github.com/anthropics/skills"
 ```
 
-### Tool aliases
+## Tool aliases
 
-The server includes a normalization layer that maps common model hallucinations to the correct tool names. If the model calls `edit` instead of `edit_file`, or passes `pattern` instead of `old_string`, the server resolves it. Reduces friction with less capable models.
+The server includes a normalization layer that maps common model hallucinations to the correct tool names.
 
----
+For example:
+
+- `edit` → `edit_file`
+- `bash` → `execute_command`
+- `pattern` → `old_string`
+
+This reduces tool-calling friction with models that occasionally use incorrect tool names or parameter names.
 
 ## Setup
+
+Clone the repository:
 
 ```bash
 git clone https://github.com/c1hucktay4lors/lm-workbench.git
@@ -86,9 +113,13 @@ cd lm-workbench
 npm install
 ```
 
-### LM Studio MCP config
+### LM Studio MCP configuration
 
-Add to `~/.lmstudio/mcp.json`:
+Add the following to:
+
+```text
+~/.lmstudio/mcp.json
+```
 
 ```json
 {
@@ -102,89 +133,76 @@ Add to `~/.lmstudio/mcp.json`:
 }
 ```
 
-Open a new conversation in LM Studio and the tools appear automatically.
+Replace `/path/to/lm-workbench` with the directory where you cloned the repository.
 
-### Environment variables (optional)
+Open a new conversation in LM Studio and the tools should appear automatically.
+
+## Environment variables
+
+All environment variables are optional.
 
 | Variable | Purpose | Default |
-|----------|---------|---------|
+|---|---|---|
 | `WORKING_DIR` | Restrict file operations to a specific directory | `process.cwd()` |
-| `MEMORY_FILE_PATH` | Override memory file location | `~/.mcp-memory/memory.md` |
-| `LMS_API_BASE` | LM Studio API base URL (for context_status) | `http://localhost:1234` |
-| `LMS_CONVERSATIONS_DIR` | LM Studio conversations directory | `~/.lmstudio/conversations` |
-
----
+| `MEMORY_FILE_PATH` | Override persistent memory location | `~/.mcp-memory/memory.md` |
+| `LMS_API_BASE` | LM Studio API base URL | `http://localhost:1234` |
+| `LMS_CONVERSATIONS_DIR` | LM Studio conversation directory | `~/.lmstudio/conversations` |
 
 ## Project structure
 
-```
+```text
 lm-workbench/
 ├── src/
-│   ├── index.js          # MCP server entry point, routing, aliases
+│   ├── index.js
 │   ├── tools/
-│   │   ├── filesystem.js # File read/write/list/delete/move/copy
-│   │   ├── bash.js       # Shell commands + background sessions
-│   │   ├── git.js        # Git operations
-│   │   ├── search.js     # Glob, grep, find-definition
-│   │   ├── edit.js       # Precise file editing
-│   │   ├── web.js        # Web search + fetch
-│   │   ├── tasks.js      # Task/todo management
-│   │   ├── memory.js     # Scratchpad (short-term notes)
-│   │   ├── memory-mn.js  # Persistent memory + context_status
-│   │   └── skills.js     # Skill load/list/install
+│   │   ├── filesystem.js
+│   │   ├── bash.js
+│   │   ├── git.js
+│   │   ├── search.js
+│   │   ├── edit.js
+│   │   ├── web.js
+│   │   ├── tasks.js
+│   │   ├── memory.js
+│   │   ├── memory-mn.js
+│   │   └── skills.js
 │   └── utils/
-│       └── paths.js      # Path normalization & resolution
-├── skills/               # Installed skill packages
-│   ├── docx/
-│   ├── frontend-design/
-│   ├── mcp-builder/
-│   ├── react-best-practices/
-│   ├── shadcn-ui/
-│   ├── static-analysis/
-│   └── web-design-guidelines/
+│       └── paths.js
+├── skills/
 ├── package.json
+├── package-lock.json
 ├── README.md
 └── .gitignore
 ```
 
----
-
 ## Requirements
 
-- **Node.js ≥ 18** (uses native `fetch`, ESM modules)
-- No build step, no TypeScript, no extra runtime dependencies
+- Node.js 18+
+- LM Studio
+- An MCP-compatible local LLM
 
-## What's NOT included
-
-This is deliberately a curated toolkit. The following modules exist in the original qwen3-mcp but are **not** part of lm-workbench:
-
-- Notebook editing (Jupyter)
-- Media reading (images, PDFs, screenshots)
-- Structured thinking / planning
-- User interaction prompts
-- Conversation state management
-- ComfyUI workflow tools
-- GitHub Pages blog
-- LLM-powered file summarization
-
-If you need any of these, they're in the source project and can be added as additional modules.
-
----
+No build step is required.
 
 ## Tested models
 
-Models that have been used with lm-workbench, smallest to largest:
+Models that have been used with lm-workbench:
 
-- [Qwen3.5-9B](https://huggingface.co/lmstudio-community/Qwen3.5-9B-GGUF)
-- [Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP](https://huggingface.co/DavidAU/Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP-GGUF)
-- [Qwen3.8-27B-Cold-Fusion-GAIN-V1.1-NM-DAU-NEO-MAX-MTP](https://huggingface.co/DavidAU/Qwen3.8-27B-Cold-Fusion-GAIN-V1.1-NM-DAU-NEO-MAX-MTP-GGUF)
-- [Qwen3.8-27B](https://huggingface.co/lmstudio-community/Qwen3.8-27B-GGUF)
-- [Qwen3.6-40B-Fable-Fusion-6-Core-Deckard-Eleanor-Heretic-Uncensored-NM-DAU-NEO-MAX-MTP](https://huggingface.co/DavidAU/Qwen3.6-40B-Fable-Fusion-6-Core-Deckard-Eleanor-Heretic-Uncensored-NM-DAU-NEO-MAX-MTP-GGUF)
+- Qwen3.5-9B
+- Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP
+- Qwen3.8-27B-Cold-Fusion-GAIN-V1.1-NM-DAU-NEO-MAX-MTP
+- Qwen3.8-27B
+- Qwen3.6-40B-Fable-Fusion-6-Core-Deckard-Eleanor-Heretic-Uncensored-NM-DAU-NEO-MAX-MTP
 
-> This list is a living one. If you've run lm-workbench with a model that works well, add it.
-
----
+This list is a living one. If you've run lm-workbench with a model that works well, add it.
 
 ## License
 
 MIT
+
+## Credits
+
+lm-workbench would not exist in its current form without the work of the projects it was derived from.
+
+- **qwen3-mcp** — https://github.com/marduk191/qwen3_mcp
+- **mnemonic-mcp** — https://github.com/c1hucktay4lors/mnemonic-mcp
+
+Credit remains with the original authors for their respective components and ideas.
