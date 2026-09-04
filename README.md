@@ -18,9 +18,11 @@ It worked, but the tool list got heavy. Every tool definition injected into the 
 
 ### mnemonic-mcp
 
-A separate TypeScript MCP server ([@c1hucktay4lors/mnemonic-mcp](https://github.com/c1hucktay4lors/mnemonic-mcp)) that added persistent long-term memory. Stored everything in a single markdown file with `## Section` headers, with 11 tools for reading, saving, searching, categorizing, and tidying memory entries. Also included a `context_status` tool that reads LM Studio's own conversation JSON files to report exact token usage.
+A separate TypeScript MCP server ([c1hucktay4lors/mnemonic-mcp](https://github.com/c1hucktay4lors/mnemonic-mcp)) — also built here — that added persistent long-term memory. Stored everything in a single markdown file with `## Section` headers, with 11 tools for reading, saving, searching, categorizing, and tidying memory entries. Also included a `context_status` tool that reads LM Studio's own conversation JSON files to report exact token usage.
 
 It was a TypeScript project using the high-level `McpServer` class and zod schemas — clean but another server process, another entry in mcp.json, another set of tool definitions to manage.
+
+The memory logic in this project (`src/tools/memory-mn.js`) is a plain-JS port of that server, preserving the same file format, behavior, and tool names.
 
 ### The merge
 
@@ -79,7 +81,7 @@ The server includes a normalization layer that maps common model hallucinations 
 ## Setup
 
 ```bash
-git clone <repo-url> lm-workbench
+git clone https://github.com/c1hucktay4lors/lm-workbench.git
 cd lm-workbench
 npm install
 ```
@@ -173,13 +175,11 @@ If you need any of these, they're in the source project and can be added as addi
 
 Models that have been used with lm-workbench, smallest to largest:
 
-| Model | Params | Notes |
-|-------|--------|-------|
-| [Qwen3.5-9B](https://huggingface.co/lmstudio-community/Qwen3.5-9B-GGUF) | 9B | Light, fast, good for quick tasks |
-| [Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP](https://huggingface.co/DavidAU/Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP-GGUF) | 27B | Fable Fusion merge |
-| [Qwen3.8-27B-Cold-Fusion-GAIN-V1.1-NM-DAU-NEO-MAX-MTP](https://huggingface.co/DavidAU/Qwen3.8-27B-Cold-Fusion-GAIN-V1.1-NM-DAU-NEO-MAX-MTP-GGUF) | 27B | Cold Fusion GAIN merge |
-| [Qwen3.8-27B](https://huggingface.co/lmstudio-community/Qwen3.8-27B-GGUF) | 27B | Base community quant |
-| [Qwen3.6-40B-Fable-Fusion-6-Core-Deckard-Eleanor-Heretic-Uncensored-NM-DAU-NEO-MAX-MTP](https://huggingface.co/DavidAU/Qwen3.6-40B-Fable-Fusion-6-Core-Deckard-Eleanor-Heretic-Uncensored-NM-DAU-NEO-MAX-MTP-GGUF) | 40B | Largest in set, Fable Fusion 6 merge |
+- [Qwen3.5-9B](https://huggingface.co/lmstudio-community/Qwen3.5-9B-GGUF)
+- [Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP](https://huggingface.co/DavidAU/Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP-GGUF)
+- [Qwen3.8-27B-Cold-Fusion-GAIN-V1.1-NM-DAU-NEO-MAX-MTP](https://huggingface.co/DavidAU/Qwen3.8-27B-Cold-Fusion-GAIN-V1.1-NM-DAU-NEO-MAX-MTP-GGUF)
+- [Qwen3.8-27B](https://huggingface.co/lmstudio-community/Qwen3.8-27B-GGUF)
+- [Qwen3.6-40B-Fable-Fusion-6-Core-Deckard-Eleanor-Heretic-Uncensored-NM-DAU-NEO-MAX-MTP](https://huggingface.co/DavidAU/Qwen3.6-40B-Fable-Fusion-6-Core-Deckard-Eleanor-Heretic-Uncensored-NM-DAU-NEO-MAX-MTP-GGUF)
 
 > This list is a living one. If you've run lm-workbench with a model that works well, add it.
 
