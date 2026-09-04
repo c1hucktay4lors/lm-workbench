@@ -25,7 +25,7 @@ The result of my trimming and additions is a toolkit that has:
 - Real LM Studio context-status reporting
 - Filesystem, shell, Git, search, editing, web, tasks, and skills
 - No extra runtime dependencies beyond the MCP SDK
-- ~62 focused tools instead of ~141 from both toolkits combined
+- 60 focused tools instead of ~141 from both toolkits combined
 
 My thinking was: 
 
@@ -157,6 +157,14 @@ lm-workbench/
 │   └── utils/
 │       └── paths.js
 ├── skills/
+│   ├── code-review/
+│   ├── docx/
+│   ├── frontend-design/
+│   ├── mcp-builder/
+│   ├── react-best-practices/
+│   ├── shadcn-ui/
+│   ├── static-analysis/
+│   └── web-design-guidelines/
 ├── package.json
 ├── package-lock.json
 ├── README.md

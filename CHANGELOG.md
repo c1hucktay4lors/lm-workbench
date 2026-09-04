@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- (nothing yet)
+- code-review skill (general-purpose code review methodology: structure, style, security, performance, error handling)
 
 ### Changed
 - (nothing yet)
@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.0.0] - 2025-06-15
+## [1.0.0] - 2026-06-15
 
 ### Added
 - Initial release
@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Persistent memory tools (11): read, save, search, sections, categorize, tidy, context status
 - Skills tools (3): list, load, install from GitHub
 - Tool alias normalization layer for common model hallucinations
-- Bundled skills: docx, frontend-design, mcp-builder, react-best-practices, shadcn-ui, static-analysis, web-design-guidelines
+- Bundled skills: code-review, docx, frontend-design, mcp-builder, react-best-practices, shadcn-ui, static-analysis, web-design-guidelines
 
 ### Notes
 - Consolidated from qwen3-mcp (core tools) + mnemonic-mcp (memory system)
