@@ -81,16 +81,36 @@ function ensureDirectory(filePath) {
 }
 
 async function readMemory() {
-  try { return await fs.readFile(memoryFilePath, "utf-8"); } catch { return ""; }
+  try {
+    return await fs.readFile(memoryFilePath, "utf-8");
+  } catch (e) {
+    // "no file yet" is a legitimate empty store; anything else is a real failure
+    // that MUST propagate — swallowing it (old behavior) let a later write wipe
+    // the whole store with a tiny file.
+    if (e && e.code === "ENOENT") return "";
+    throw new Error(`Cannot read memory file at ${memoryFilePath}: ${e.message}`);
+  }
 }
 
 async function writeMemory(content) {
   ensureDirectory(memoryFilePath);
+  // Back up the existing non-empty store before overwriting. A read failure
+  // other than "file doesn't exist yet" is fatal: writing over an unreadable
+  // store would silently destroy it.
   try {
     const existing = await fs.readFile(memoryFilePath, "utf-8");
     if (existing.trim()) createBackup();
-  } catch {}
-  await fs.writeFile(memoryFilePath, content, "utf-8");
+  } catch (e) {
+    if (!(e && e.code === "ENOENT")) {
+      throw new Error(`Refusing to write memory: could not read existing store at ${memoryFilePath}: ${e.message}`);
+    }
+  }
+  // Atomic write: temp file in the same directory, then rename over the target.
+  // A crash mid-write can no longer leave a truncated store.
+  const dir = path.dirname(memoryFilePath);
+  const tmpPath = path.join(dir, `.${path.basename(memoryFilePath)}.${process.pid}.${Date.now()}.tmp`);
+  await fs.writeFile(tmpPath, content, "utf-8");
+  await fs.rename(tmpPath, memoryFilePath);
 }
 
 async function createBackup() {
@@ -119,6 +139,43 @@ function findSection(lines, name) {
 
 function listSections(content) {
   return [...content.matchAll(/^##\s+(.+)$/gm)].map(m => m[1].trim());
+}
+
+// Block-aware find/replace used by update_memory + delete_memory.
+// The old code checked existence with a whole-file `includes()` but edited
+// line-by-line, so a MULTI-LINE `find` passed the existence check yet never
+// matched any single line → a no-op that still returned "Updated."/"Deleted."
+// Here: multi-line finds are replaced at the string level, single-line finds
+// keep the line-block semantics, and a no-op is reported as "not found".
+function applyFindReplace(content, find, replace) {
+  const f = (find == null ? "" : String(find));
+  if (!f.trim()) return { ok: false, reason: "empty" };
+  const ci = content.toLowerCase().indexOf(f.toLowerCase());
+  if (ci === -1) return { ok: false, reason: "notfound" };
+
+  let newContent;
+  if (f.includes("\n")) {
+    const rep = (replace == null ? "" : String(replace)).trim();
+    newContent = content.slice(0, ci) + rep + content.slice(ci + f.length);
+  } else {
+    const lines = content.split("\n");
+    const newLines = [];
+    let skipBlock = false;
+    let hit = false;
+    for (const line of lines) {
+      if (skipBlock && !line.trim()) { skipBlock = false; continue; }
+      if (!skipBlock && line.toLowerCase().includes(f.toLowerCase())) {
+        if (replace != null && String(replace).trim()) newLines.push(String(replace).trim());
+        hit = true;
+        skipBlock = true;
+        continue;
+      }
+      if (!skipBlock || line.trim()) newLines.push(line);
+    }
+    if (!hit) return { ok: false, reason: "notfound" };
+    newContent = newLines.join("\n");
+  }
+  return { ok: true, newContent: newContent.replace(/\n{3,}/g, "\n\n") };
 }
 
 async function smartSaveFact(fact, content) {
@@ -151,9 +208,11 @@ async function smartSaveFact(fact, content) {
     } else {
       const before = lines.slice(0, range.end).join("\n");
       const after = lines.slice(range.end).join("\n");
-      // Ensure proper newline separation: trim trailing whitespace/newlines from existing content,
-      // then add blank line + new bullet for readability
-      newContent = before.trimEnd() + `\n\n- ${trimmedFact}` + after;
+      // Append the bullet at the end of the section and ALWAYS keep a blank
+      // line before whatever follows (the next ## header). The old code did
+      // `... - fact` + after, gluing the fact onto the next header line
+      // ("- fact## NextSection") and corrupting the file structure.
+      newContent = before.trimEnd() + `\n\n- ${trimmedFact}` + (after.trim() ? `\n\n` + after : "");
     }
 
     await writeMemory(newContent);
@@ -389,6 +448,18 @@ function ctxRecommendation(status, pct) {
 // ---------- Dispatcher ----------
 
 export async function handleMnemonicTool(name, args = {}) {
+  // Catch-all: any thrown error (I/O failure on the store, unknown tool, ...)
+  // becomes a readable tool result instead of crashing the server. For the
+  // write paths the error is raised *before* writeMemory is reached, so a
+  // failed read can never turn into a full-store wipe.
+  try {
+    return await dispatchMnemonicTool(name, args);
+  } catch (e) {
+    return { content: [{ type: "text", text: `ERROR: ${e.message}` }] };
+  }
+}
+
+async function dispatchMnemonicTool(name, args = {}) {
   switch (name) {
     case "read_memory": {
       let content = await readMemory();
@@ -440,45 +511,22 @@ export async function handleMnemonicTool(name, args = {}) {
 
     case "update_memory": {
       const content = await readMemory();
-      if (!content.toLowerCase().includes(args.find.toLowerCase())) {
+      const isDelete = !args.replace?.trim();
+      const res = applyFindReplace(content, args.find, args.replace);
+      if (!res.ok) {
         return { content: [{ type: "text", text: "Not found in memory." }] };
       }
-
-      const lines = content.split("\n");
-      const newLines = [];
-      let skipBlock = false;
-
-      for (const line of lines) {
-        if (skipBlock && !line.trim()) { skipBlock = false; continue; }
-        if (!skipBlock && line.toLowerCase().includes(args.find.toLowerCase())) {
-          if (args.replace?.trim()) newLines.push(args.replace.trim());
-          skipBlock = true;
-          continue;
-        }
-        if (!skipBlock || line.trim()) newLines.push(line);
-      }
-
-      await writeMemory(newLines.join("\n").replace(/\n{3,}/g, "\n\n"));
-      return { content: [{ type: "text", text: !args.replace?.trim() ? "Deleted." : "Updated." }] };
+      await writeMemory(res.newContent);
+      return { content: [{ type: "text", text: isDelete ? "Deleted." : "Updated." }] };
     }
 
     case "delete_memory": {
       const content = await readMemory();
-      if (!content.toLowerCase().includes(args.text.toLowerCase())) {
+      const res = applyFindReplace(content, args.text, "");
+      if (!res.ok) {
         return { content: [{ type: "text", text: "Not found." }] };
       }
-
-      const lines = content.split("\n");
-      const newLines = [];
-      let skipBlock = false;
-
-      for (const line of lines) {
-        if (skipBlock && !line.trim()) { skipBlock = false; continue; }
-        if (!skipBlock && line.toLowerCase().includes(args.text.toLowerCase())) { skipBlock = true; continue; }
-        if (!skipBlock || line.trim()) newLines.push(line);
-      }
-
-      await writeMemory(newLines.join("\n").replace(/\n{3,}/g, "\n\n"));
+      await writeMemory(res.newContent);
       return { content: [{ type: "text", text: "Deleted." }] };
     }
 
@@ -542,7 +590,9 @@ export async function handleMnemonicTool(name, args = {}) {
       } else {
         const before = lines.slice(0, range.end).join("\n");
         const after = lines.slice(range.end).join("\n");
-        await writeMemory(before.trimEnd() + `\n${trimmedContent}` + after);
+        // Same gluing guard as smartSaveFact: keep a blank line before the next
+        // ## header so the appended content never fuses onto it.
+        await writeMemory(before.trimEnd() + `\n${trimmedContent}` + (after.trim() ? `\n\n` + after : ""));
       }
 
       return { content: [{ type: "text", text: `Added to '${trimmedSection}'.` }] };
@@ -565,94 +615,91 @@ export async function handleMnemonicTool(name, args = {}) {
       if (!content.trim()) return { content: [{ type: "text", text: "Nothing to tidy." }] };
 
       const lines = content.split("\n");
+      const DATED_RE = /^\[(\d{4}-\d{2}-\d{2})\]\s+(.+)$/;
 
-      // Extract ALL standalone dated entries anywhere in file (they shouldn't be inside sections)
-      const datedEntries = [];
-
+      // Collect standalone dated entries, INCLUDING any indented continuation
+      // lines (wrapped entries) so they move as one unit and are never orphaned.
+      const entries = []; // { lineNum, date, fact, cont: [line indices] }
       for (let i = 0; i < lines.length; i++) {
-        const match = lines[i].match(/^\[(\d{4}-\d{2}-\d{2})\]\s+(.+)$/);
-        if (match) {
-          datedEntries.push({ lineNum: i, date: match[1], fact: match[2] });
+        const m = lines[i].match(DATED_RE);
+        if (!m) continue;
+        const fact = m[2].trim();
+        const date = m[1];
+        const cont = [];
+        let j = i + 1;
+        while (j < lines.length) {
+          const l = lines[j];
+          if (!l.trim()) break;             // blank line ends the entry
+          if (l.trim().startsWith("#")) break; // next header
+          if (l === l.trimStart()) break;   // not indented → not a continuation
+          cont.push(j);
+          j++;
         }
+        entries.push({ lineNum: i, date, fact, cont });
       }
 
-      if (datedEntries.length === 0) {
+      if (entries.length === 0) {
         return { content: [{ type: "text", text: "No standalone dated entries found to organize." }] };
       }
 
-      // Categorize each entry and group by target section
-      const moves = {}; // section -> [facts]
+      // Categorize each entry (using fact + continuations for a fairer match).
+      const moves = {};        // section -> [lines to insert]
+      const sectionCount = {}; // section -> number of entries moved there
       const uncategorized = [];
+      const removedIdx = new Set(); // ONLY lines of entries we actually move
 
-      for (const entry of datedEntries) {
-        const category = detectCategory(entry.fact);
+      for (const entry of entries) {
+        const fullText = [entry.fact, ...entry.cont.map(c => lines[c].trim())].join(" ");
+        const category = detectCategory(fullText);
         if (category) {
           if (!moves[category.section]) moves[category.section] = [];
           moves[category.section].push(`- ${entry.fact}`);
+          for (const c of entry.cont) moves[category.section].push(lines[c]);
+          sectionCount[category.section] = (sectionCount[category.section] || 0) + 1;
+          removedIdx.add(entry.lineNum);
+          for (const c of entry.cont) removedIdx.add(c);
         } else {
+          // UNCLASSIFIED → stays exactly where it was. The old code deleted
+          // every dated line and only re-inserted the classified ones, so
+          // these were silently destroyed (and the summary lied about it).
           uncategorized.push(entry);
         }
       }
 
-      // Build new content: remove dated entries, add to sections
-      const keptLines = lines.filter((_, i) => !datedEntries.some(d => d.lineNum === i));
+      // Nothing classifiable — don't rewrite (avoid a needless backup), be honest.
+      if (Object.keys(moves).length === 0) {
+        return { content: [{ type: "text", text:
+          `Nothing to move: ${uncategorized.length} dated entry${uncategorized.length > 1 ? "ies" : ""} couldn't be categorized confidently and were left in place.` }] };
+      }
 
-      // Insert categorized facts into their sections
-      let resultContent = keptLines.join("\n");
+      // Build new content: keep everything except the moved entries' lines.
+      let resultContent = lines.filter((_, i) => !removedIdx.has(i)).join("\n");
 
-      for (const [section, facts] of Object.entries(moves)) {
-        const sectionHeader = `## ${section}`;
-        if (resultContent.includes(sectionHeader)) {
-          // Append to existing section — insert before next ## or end
-          const idx = resultContent.indexOf(sectionHeader);
-          let insertPoint = resultContent.length;
-          for (let i = idx + sectionHeader.length; i < resultContent.length; i++) {
-            if (resultContent[i] === "\n" && resultContent.slice(i + 1, i + 3) === "## ") {
-              insertPoint = i + 1; // before next header's newline
-              break;
-            }
-          }
-
-          const factsBlock = `\n${facts.join("\n")}`;
-          if (insertPoint < resultContent.length) {
-            resultContent = resultContent.slice(0, insertPoint).trimEnd() + factsBlock + "\n" + resultContent.slice(insertPoint);
-          } else {
-            resultContent = resultContent.trimEnd() + factsBlock;
-          }
+      // Insert each classified group into its target section (existing or new),
+      // always keeping a blank line before any following ## header.
+      for (const [section, factLines] of Object.entries(moves)) {
+        const rlines = resultContent.split("\n");
+        const range = findSection(rlines, section);
+        if (range) {
+          const before = rlines.slice(0, range.end).join("\n");
+          const after = rlines.slice(range.end).join("\n");
+          resultContent = before.trimEnd() + "\n" + factLines.join("\n") + (after.trim() ? "\n\n" + after : "");
         } else {
-          // Create new section at end (before any remaining uncategorized dated entries)
-          const factsBlock = `\n\n## ${section}\n${facts.join("\n")}`;
-
-          if (uncategorized.length > 0) {
-            // Insert before the first remaining dated entry line
-            const firstUncatLine = resultContent.indexOf(`[${uncategorized[0].date}]`);
-            if (firstUncatLine !== -1) {
-              resultContent = resultContent.slice(0, firstUncatLine).trimEnd() + factsBlock + "\n\n" + resultContent.slice(firstUncatLine);
-            } else {
-              resultContent += factsBlock;
-            }
-          } else {
-            resultContent = resultContent.trimEnd() + factsBlock;
-          }
+          resultContent = resultContent.trimEnd() + `\n\n## ${section}\n` + factLines.join("\n");
         }
       }
 
-      // Clean up excessive blank lines and normalize formatting
-      resultContent = resultContent.replace(/\n{3,}/g, "\n\n");
-
+      resultContent = resultContent.replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
       await writeMemory(resultContent);
 
-      const movedCount = Object.values(moves).reduce((sum, arr) => sum + arr.length, 0);
-      const summaryLines = [`Tidied ${datedEntries.length} standalone entry${datedEntries.length > 1 ? "ies" : ""}.`];
-
-      for (const [section, facts] of Object.entries(moves)) {
-        summaryLines.push(`→ Moved ${facts.length} to "${section}"`);
+      const movedCount = Object.values(sectionCount).reduce((a, b) => a + b, 0);
+      const summaryLines = [`Tidied ${entries.length} standalone dated entr${entries.length > 1 ? "ies" : "y"} (${movedCount} moved, ${uncategorized.length} kept in place).`];
+      for (const [section] of Object.entries(moves)) {
+        summaryLines.push(`→ Moved ${sectionCount[section]} to "${section}"`);
       }
-
       if (uncategorized.length > 0) {
-        summaryLines.push(`${uncategorized.length} left as dated entries (couldn't categorize confidently)`);
+        summaryLines.push(`→ Kept ${uncategorized.length} as dated entries (couldn't categorize confidently — left in place, nothing deleted)`);
       }
-
       return { content: [{ type: "text", text: summaryLines.join("\n") }] };
     }
 
