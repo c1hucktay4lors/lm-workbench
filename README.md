@@ -182,7 +182,7 @@ No build step is required.
 
 ## Tested models
 
-Models that have been used with LM Workbenche's OG toolkits, and theoretically should work with this:
+Models that have been used with LM Workbench's OG toolkits, and theoretically should work with this:
 
 - Qwen3.5-9B
 - Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP
