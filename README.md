@@ -2,41 +2,42 @@
 
 All-in-one MCP server for LM Studio. File operations, bash, git, search, web, tasks, memory, and skills — in a single toolkit.
 
-## Where it came from
+## What it is
 
-**LM Workbench** is a consolidated derivative of two projects that i was using together:
+**LM Workbench** is a consolidation of two MCP toolkits I was using together:
 
-### qwen3-mcp
+[**marduk191's qwen3-mcp**](https://github.com/marduk191/qwen3_mcp)
 
-[**qwen3-mcp**](https://github.com/marduk191/qwen3_mcp) by **marduk191** provided the core agent tooling used by lm-workbench.
+and
 
-Their toolkit is very robust, but also contained tools I had never used and probably won't with what I do with LLMs
+[**My own mnemonic-mcp**](https://github.com/c1hucktay4lors/mnemonic-mcp)
+
+**qwen3-mcp** provided the core agent tooling used by lm-workbench.
+
+Their toolkit is very robust, but also contained tools I had never used and probably won't with what I do with LLMs, so I wanted to remove them to slim it down
 
 ### mnemonic-mcp
 
-I created [**mnemonic-mcp**](https://github.com/c1hucktay4lors/mnemonic-mcp) to give models I ran in LM studio access to a simple, long-term memory storage location. 
+I created [**mnemonic-mcp**](https://github.com/c1hucktay4lors/mnemonic-mcp) to give models I run in LM studio access to a simple, long-term memory storage location and the **ability to read LM Studio's conversation data to report actual context usage** so that the model can determine what to do next with the context it has.
 
-It adds a file-based long-term memory, memory organization, and the **ability to read LM Studio's conversation data to report actual context usage** so that the model can determine what to do next with the context it has.
+The result of my trimming and additions is a toolkit that has:
 
-### The merge
-
-LM Workbench combines the core working set from qwen3-mcp with the mnemonic-mcp memory system into a single MCP server.
-
-The result:
-
-- **One server instead of two**
-- **One MCP configuration entry instead of two**
 - Persistent long-term memory
 - Scratchpads for short-term state
 - Real LM Studio context-status reporting
 - Filesystem, shell, Git, search, editing, web, tasks, and skills
-- ~62 focused tools instead of ~141
-- No TypeScript or build step
 - No extra runtime dependencies beyond the MCP SDK
+- ~62 focused tools instead of ~141 from both toolkits combined
 
-The specialized modules from qwen3-mcp — including ComfyUI, notebook, media, planning, thinking, interaction, blog, and summarization tools — are intentionally not included, as I/the models I use never used them.
+My thinking was: 
+
+**Less tools = less tokens at the beginning = more work done.**
+
+Because running LLMs on your own hardware can be pricey, and I wanted to stretch the GPU power I have as much as possible, while giving the model tools to actually create things, not just tell me how to do it.
 
 ## What it does
+
+The following tools are directly pulled from Qwen3-mcp, minus the memory section.
 
 | Module | Tools | What it covers |
 |---|---:|---|
@@ -71,7 +72,7 @@ Structured long-term memory stored in:
 
 Memory supports sections, keyword-based categorization, deduplication, backup rotation, searching, and cleanup.
 
-The `context_status` tool reads LM Studio's actual conversation files to report real token usage rather than estimating it (this is a bit spotty on if the model calls it naturally, still working on it. but does work if you tell it to check context status).
+The `context_status` tool reads LM Studio's actual conversation files to report real token usage rather than estimating it (this is a bit spotty on if the model calls it naturally, still working on it. But does work if you tell it to check context status).
 
 ## Skills system
 
@@ -109,11 +110,7 @@ npm install
 
 ### LM Studio MCP configuration
 
-Add the following to:
-
-```text
-~/.lmstudio/mcp.json
-```
+Add the following to your mcp.json:
 
 ```json
 {
@@ -171,7 +168,7 @@ lm-workbench/
 ## Requirements
 
 - Node.js 18+
-- LM Studio (have not tried others yet, but I believe most tools will work, minus the `context_status` one)
+- LM Studio (have not tried others yet, but I believe most tools will work outside of LM Studio, minus the `context_status` one)
 - An MCP-compatible local LLM
 
 No build step is required.
@@ -180,11 +177,11 @@ No build step is required.
 
 Models that have been used with LM Workbench's OG toolkits, and theoretically should work with this:
 
-- Qwen3.5-9B
-- Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP
-- Qwen3.8-27B-Cold-Fusion-GAIN-V1.1-NM-DAU-NEO-MAX-MTP
-- Qwen3.8-27B
-- Qwen3.6-40B-Fable-Fusion-6-Core-Deckard-Eleanor-Heretic-Uncensored-NM-DAU-NEO-MAX-MTP
+- [Qwen3.5-9B](https://huggingface.co/lmstudio-community/Qwen3.5-9B-GGUF)
+- [DavidAU/Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP](https://huggingface.co/DavidAU/Qwen3.6-27B-Fable-Fusion-711-Uncensored-Heretic-NM-DAU-NEO-MAX-MTP-GGUF)
+- [DavidAU/Qwen3.8-27B-Cold-Fusion-GAIN-V1.1-NM-DAU-NEO-MAX-MTP](https://huggingface.co/DavidAU/Qwen3.8-27B-Cold-Fusion-GAIN-V1.1-NM-DAU-NEO-MAX-MTP-GGUF)
+- [Qwen3.8-27B](https://huggingface.co/lmstudio-community/Qwen3.8-27B-GGUF) (This model at Q4_K_M was what did the majority of the merging in this project, and is the primary test model for it)
+- [DavidAU/Qwen3.6-40B-Fable-Fusion-6-Core-Deckard-Eleanor-Heretic-Uncensored-NM-DAU-NEO-MAX-MTP](https://huggingface.co/DavidAU/Qwen3.6-40B-Fable-Fusion-6-Core-Deckard-Eleanor-Heretic-Uncensored-NM-DAU-NEO-MAX-MTP-GGUF)
 
 
 ## License
