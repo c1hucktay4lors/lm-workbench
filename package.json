@@ -1,0 +1,33 @@
+{
+  "name": "lm-workbench",
+  "version": "1.0.0",
+  "description": "All-in-one MCP server for LM Studio — file ops, bash, git, search, web, tasks, memory, and skills in a single lightweight toolkit.",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "lm-workbench": "./src/index.js"
+  },
+  "scripts": {
+    "mcp": "node src/index.js",
+    "start": "node src/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "lmstudio",
+    "local-llm",
+    "coding-agent",
+    "agent-tools",
+    "agent-skills",
+    "workbench"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.3",
+    "glob": "^13.0.0",
+    "ignore": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
