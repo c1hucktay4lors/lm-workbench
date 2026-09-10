@@ -10,8 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - code-review skill (general-purpose code review methodology: structure, style, security, performance, error handling)
 
+### Removed
+- Git tool module (10 tools: git_status, git_diff, git_log, git_add, git_commit, git_branch, git_checkout, git_push, git_pull, git_clone) and src/tools/git.js. Usage data across real conversations showed 1 dedicated git-tool call vs. ~9 shell `git` calls, and every real-world git command (init -b, -c config, rm --cached, custom --format) required the shell anyway. Saves ~900 tokens of tool schema per message. Git remains fully available via `execute_command`.
+
 ### Changed
-- (nothing yet)
+- README tool count: 60 → 50 focused tools
 
 ### Fixed
 - (nothing yet)

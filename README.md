@@ -23,9 +23,9 @@ The result of my trimming and additions is a toolkit that has:
 - Persistent long-term memory
 - Scratchpads for short-term state
 - Real LM Studio context-status reporting
-- Filesystem, shell, Git, search, editing, web, tasks, and skills
+- Filesystem, shell, search, editing, web, tasks, and skills (Git via `execute_command`)
 - No extra runtime dependencies beyond the MCP SDK
-- 60 focused tools instead of ~141 from both toolkits combined
+- 50 focused tools instead of ~141 from both toolkits combined
 
 My thinking was: 
 
@@ -41,7 +41,6 @@ The following tools are directly pulled from Qwen3-mcp, minus the memory section
 |---|---:|---|
 | Filesystem | 10 | Read, write, list, create, delete, move, copy, stat, working directory |
 | Shell | 6 | Run commands, background sessions, read/kill output |
-| Git | 10 | Status, diff, log, add, commit, branch, checkout, push, pull, clone |
 | Search | 3 | Glob patterns, grep with context, find definitions |
 | Edit | 5 | String replace, insert line, replace lines, append, prepend |
 | Web | 2 | DuckDuckGo search, fetch + strip HTML |

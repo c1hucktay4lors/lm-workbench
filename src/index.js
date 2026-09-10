@@ -9,7 +9,6 @@ import {
 
 import { fileTools, handleFileTool } from "./tools/filesystem.js";
 import { bashTools, handleBashTool } from "./tools/bash.js";
-import { gitTools, handleGitTool } from "./tools/git.js";
 import { searchTools, handleSearchTool } from "./tools/search.js";
 import { editTools, handleEditTool } from "./tools/edit.js";
 import { webTools, handleWebTool } from "./tools/web.js";
@@ -34,7 +33,6 @@ const server = new Server(
 const allTools = [
   ...fileTools,
   ...bashTools,
-  ...gitTools,
   ...searchTools,
   ...editTools,
   ...webTools,
@@ -137,9 +135,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (bashTools.some((t) => t.name === name)) {
       return await handleBashTool(name, args);
-    }
-    if (gitTools.some((t) => t.name === name)) {
-      return await handleGitTool(name, args);
     }
     if (searchTools.some((t) => t.name === name)) {
       return await handleSearchTool(name, args);
