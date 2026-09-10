@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - code-review skill (general-purpose code review methodology: structure, style, security, performance, error handling)
+- Chat recall tools in the Memory module: `list_chats` (all stored LM Studio conversations with id, name, date, transcript size), `read_chat` (raw user/assistant transcript by id/name-fragment/`latest`, with `from: start|end|split` end-anchored slicing, a `max_chars` cap, and `at_chars`/`context_chars` mid-chat windows), and `search_chat` (case-insensitive keyword search with hit offsets + snippets for locating discussions deep in a chat)
 
 ### Removed
 - Git tool module (10 tools: git_status, git_diff, git_log, git_add, git_commit, git_branch, git_checkout, git_push, git_pull, git_clone) and src/tools/git.js. Usage data across real conversations showed 1 dedicated git-tool call vs. ~9 shell `git` calls, and every real-world git command (init -b, -c config, rm --cached, custom --format) required the shell anyway. Saves ~900 tokens of tool schema per message. Git remains fully available via `execute_command`.

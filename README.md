@@ -25,7 +25,7 @@ The result of my trimming and additions is a toolkit that has:
 - Real LM Studio context-status reporting
 - Filesystem, shell, search, editing, web, tasks, and skills (Git via `execute_command`)
 - No extra runtime dependencies beyond the MCP SDK
-- 50 focused tools instead of ~141 from both toolkits combined
+- 53 focused tools instead of ~141 from both toolkits combined
 
 My thinking was: 
 
@@ -46,7 +46,7 @@ The following tools are directly pulled from Qwen3-mcp, minus the memory section
 | Web | 2 | DuckDuckGo search, fetch + strip HTML |
 | Tasks | 7 | Todo tracking with file persistence |
 | Scratchpad | 3 | Short-term notes that persist between sessions |
-| Memory | 11 | Long-term memory, search, organization, and context status |
+| Memory | 14 | Long-term memory, search, organization, context status, and chat recall |
 | Skills | 3 | List, load, and install instruction packages from GitHub |
 
 ## Memory system
@@ -70,6 +70,10 @@ Structured long-term memory stored in:
 Memory supports sections, keyword-based categorization, deduplication, backup rotation, searching, and cleanup.
 
 The `context_status` tool reads LM Studio's actual conversation files to report real token usage rather than estimating it (this is a bit spotty on if the model calls it naturally, still working on it. But does work if you tell it to check context status).
+
+### Chat recall
+
+`list_chats`, `read_chat`, and `search_chat` read the same conversation files (~/.lmstudio/conversations/*.conversation.json) and let a model recall previous chats as the **raw user/assistant transcript** — no handoff summary. `list_chats` indexes every stored chat (id, name, date, transcript size, recorded token count). `read_chat` pulls a chat by id/name-fragment/`latest` with three slicing modes: end-anchored (`from: start | end | split`, capped by `max_chars`) or an explicit mid-chat window (`at_chars` + `context_chars`). `search_chat` keyword-searches a chat's transcript and returns hit offsets + snippets, so you can find a specific discussion deep in a long chat and then window around it with `read_chat`. Note: completed tool calls aren't stored in these files (only their success status), so transcripts are inherently user/assistant text only.
 
 ## Skills system
 

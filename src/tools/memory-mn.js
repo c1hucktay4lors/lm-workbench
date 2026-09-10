@@ -1,7 +1,7 @@
 // memory-mn.js — plain-JS port of mnemonic-mcp (src/server.ts).
-// 11 tools: read_memory, auto_save, save_memory, update_memory, delete_memory,
+// 14 tools: read_memory, auto_save, save_memory, update_memory, delete_memory,
 // search_memory, list_sections, save_to_section, replace_section, tidy_memory,
-// context_status.
+// context_status, list_chats, read_chat, search_chat.
 // Exports flat tool definitions (mnemonicTools) + a dispatcher
 // (handleMnemonicTool) matching lm-workbench's low-level Server style.
 
@@ -346,6 +346,74 @@ export const mnemonicTools = [
       properties: {},
     },
   },
+  {
+    name: "list_chats",
+    description:
+      "List all stored LM Studio conversations (from ~/.lmstudio/conversations): id, name, creation date, message count, and full-transcript size (chars + rough token estimate, plus LM Studio's own recorded token count). Use this to find a previous chat, then pull its content with read_chat. The 'current' chat is the most recently modified file.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "read_chat",
+    description:
+      "Read the raw user/assistant transcript of a stored LM Studio conversation (no summary — the actual words that were said). Locate the chat with list_chats, then pass its id (or a unique name fragment, or 'latest'). Slicing: from controls end-anchored slices ('start' oldest, 'end' newest, 'split' half from each end — default), capped by max_chars (default 20000). For mid-chat windows (e.g. around a search_chat hit), pass at_chars (character offset) + context_chars (window size, default 20000). Tool calls are not part of these files (LM Studio keeps only their success status).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        chat: {
+          type: "string",
+          description: "Chat id from list_chats (e.g. '1788900202315'), a unique fragment of its name, or 'latest' for the most recently modified chat.",
+        },
+        max_chars: {
+          type: "number",
+          description: "Maximum characters of transcript to return (default 20000, hard cap 500000). Raise it to pull more of the chat.",
+        },
+        from: {
+          type: "string",
+          enum: ["start", "end", "split"],
+          description: "Which part to return: 'start' = oldest messages, 'end' = newest messages, 'split' = half from each end (default). Ignored when at_chars is given.",
+        },
+        at_chars: {
+          type: "number",
+          description: "Character offset in the transcript to center a window on (e.g. a hit offset from search_chat). Overrides from/max_chars when given.",
+        },
+        context_chars: {
+          type: "number",
+          description: "Window size in characters around at_chars (default 20000, hard cap 500000).",
+        },
+      },
+      required: ["chat"],
+    },
+  },
+  {
+    name: "search_chat",
+    description:
+      "Keyword-search the transcript of a stored LM Studio conversation (case-insensitive substring). Returns total hit count, the first N hits (max_hits, default 10) with their character offsets and a short snippet around each. Use the offsets with read_chat(at_chars: <offset>, context_chars: <window>) to pull the surrounding discussion. This is how you find things in the MIDDLE of a long chat.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        chat: {
+          type: "string",
+          description: "Chat id from list_chats, a unique fragment of its name, or 'latest'.",
+        },
+        query: {
+          type: "string",
+          description: "Substring to search for (case-insensitive).",
+        },
+        max_hits: {
+          type: "number",
+          description: "How many hits to return (default 10, max 50).",
+        },
+        context_chars: {
+          type: "number",
+          description: "Snippet characters on each side of a match (default 250, max 2000).",
+        },
+      },
+      required: ["chat", "query"],
+    },
+  },
 ];
 
 // ---------- Context Window Monitoring ----------
@@ -443,6 +511,323 @@ function ctxRecommendation(status, pct) {
     default:
       return `Context healthy (${pct.toFixed(1)}%). For long tasks, call context_status again at natural checkpoints (every few major steps) so you can checkpoint via Mnemonic-MCP before running low.`;
   }
+}
+
+// ---------- Conversation Recall ----------
+//
+// Reads the stored LM Studio conversation files (the same ones context_status
+// uses) and reconstructs the raw user/assistant transcript.
+//
+// File anatomy (verified against live files, LM Studio 0.3.x):
+//   data.messages[]            — one entry per chat message
+//     .versions[]              — regenerations; .currentlySelected picks the visible one
+//       .role                  — "user" | "assistant"
+//       user:      { type:"singleStep", content:[blocks] }
+//       assistant: { type:"multiStep",  steps:[ {type:"contentBlock", content:[blocks]} |
+//                                            {type:"toolStatus", ...} ] }
+//     blocks: { type:"text", text:"..." } (non-text blocks are skipped)
+//
+// Note: completed tool calls are stored only as success/failure status — their
+// names/arguments are NOT in the file, so transcripts are inherently
+// user/assistant text only.
+
+const CHARS_PER_TOKEN_EST = 3.5; // rough, for display estimates only
+const READ_CHAT_MAX_CAP = 500000; // hard cap: ~140k tokens of transcript
+
+function extractTranscript(data) {
+  const turns = [];
+  for (const msg of data.messages ?? []) {
+    const versions = Array.isArray(msg.versions) ? msg.versions : [msg];
+    if (!versions.length) continue;
+    const sel = Number.isInteger(msg.currentlySelected) && msg.currentlySelected >= 0
+      ? msg.currentlySelected
+      : 0;
+    const v = versions[sel] ?? versions[0];
+    if (!v || typeof v !== "object") continue;
+    const role = v.role;
+    if (role !== "user" && role !== "assistant") continue;
+
+    const parts = [];
+    const seen = new Set();
+    const walk = (o) => {
+      if (!o || typeof o !== "object" || seen.has(o)) return;
+      seen.add(o);
+      if (Array.isArray(o)) { for (const x of o) walk(x); return; }
+      if (o.type === "text" && typeof o.text === "string" && o.text.trim()) {
+        parts.push(o.text.trim());
+        return;
+      }
+      if (o.type === "contentBlock" || o.type === "singleStep" || o.type === "multiStep") {
+        if (o.content) walk(o.content);
+        if (o.steps) walk(o.steps);
+        return;
+      }
+      // Fallback: descend (finite JSON; toolStatus payloads contain no text blocks)
+      for (const val of Object.values(o)) walk(val);
+    };
+    walk(v.content ?? v);
+
+    const text = parts.join("\n\n");
+    if (text) turns.push({ role, text });
+  }
+  return turns;
+}
+
+function chatDisplayName(data, fallback) {
+  if (typeof data.name === "string" && data.name.trim()) return data.name.trim();
+  for (const m of data.messages ?? []) {
+    for (const v of m.versions ?? []) {
+      if (v.role === "user") {
+        const t = extractTranscript({ messages: [m] })[0]?.text;
+        if (t) return t.split("\n")[0].slice(0, 80);
+      }
+    }
+  }
+  return fallback;
+}
+
+function fmtChars(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+  if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k";
+  return String(n);
+}
+
+async function loadAllChats() {
+  const files = await findConversationFiles(CONVERSATIONS_DIR);
+  const out = [];
+  for (const filePath of files) {
+    let stat;
+    try { stat = await fs.stat(filePath); } catch { continue; }
+    const id = path.basename(filePath).replace(/\.conversation\.json$/, "");
+    let data = null, name = null, chars = 0, msgCount = 0, recorded = null;
+    try {
+      data = JSON.parse(await fs.readFile(filePath, "utf-8"));
+      if (!data || !Array.isArray(data.messages)) continue;
+      msgCount = data.messages.length;
+      if (typeof data.tokenCount === "number") recorded = data.tokenCount;
+      name = chatDisplayName(data, id);
+      chars = extractTranscript(data).reduce((acc, t) => acc + t.text.length + t.role.length + 5, 0);
+    } catch { /* mid-write or corrupt file — still list it, marked unreadable */ }
+    out.push({
+      filePath, id, name,
+      createdAt: data?.createdAt ? Number(data.createdAt) : null,
+      mtimeMs: stat.mtimeMs,
+      sizeBytes: stat.size,
+      msgCount, chars,
+      estTokens: Math.round(chars / CHARS_PER_TOKEN_EST),
+      recorded,
+      readable: data != null,
+    });
+  }
+  out.sort((a, b) => (b.mtimeMs ?? 0) - (a.mtimeMs ?? 0));
+  return out;
+}
+
+function fmtDate(ms) {
+  if (!ms) return "unknown date";
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+async function resolveChat(query) {
+  const chats = await loadAllChats();
+  if (!chats.length) {
+    return { error: `No conversation files found in ${CONVERSATIONS_DIR}.` };
+  }
+  const q = String(query ?? "").trim().toLowerCase();
+  if (!q) return { error: "chat argument is empty — pass an id, a name fragment, or 'latest'." };
+
+  if (q === "latest") return { chat: chats[0] };
+  const exact = chats.filter((c) => c.id === q);
+  if (exact.length === 1) return { chat: exact[0] };
+  if (exact.length > 1) return { error: `Multiple chats share id fragment '${query}' — use the full id: ${exact.map((c) => c.id).join(", ")}` };
+
+  const byName = chats.filter((c) => (c.name ?? "").toLowerCase().includes(q));
+  const byIdPrefix = chats.filter((c) => c.id.startsWith(q));
+  const matches = byName.length ? byName : byIdPrefix;
+
+  if (matches.length === 1) return { chat: matches[0] };
+  if (matches.length > 1) {
+    return {
+      error:
+        `Ambiguous chat '${query}' — matches ${matches.length} chats:\n` +
+        matches.map((c) => `  ${c.id}  ${fmtDate(c.createdAt)}  ${c.name}`).join("\n") +
+        "\nPass the full id or a more specific fragment.",
+    };
+  }
+  return {
+    error:
+      `No chat matching '${query}'. Available chats:\n` +
+      chats.map((c) => `  ${c.id}  ${fmtDate(c.createdAt)}  ${c.name}`).join("\n"),
+  };
+}
+
+async function handleListChats() {
+  const chats = await loadAllChats();
+  if (!chats.length) {
+    return { content: [{ type: "text", text: `No conversation files found in ${CONVERSATIONS_DIR}.` }] };
+  }
+  const lines = [
+    `STORED CHATS (${chats.length}) — newest first. Read one with read_chat (pass its id or a name fragment).`,
+    "─".repeat(70),
+    `${"id".padEnd(15)}${"created".padEnd(18)}${"msgs".padEnd(6)}${"transcript".padEnd(17)}${"recorded".padEnd(12)}name`,
+  ];
+  for (const c of chats) {
+    lines.push(
+      [
+        c.id.padEnd(15),
+        fmtDate(c.createdAt).padEnd(18),
+        String(c.msgCount).padEnd(6),
+        (c.readable ? `${fmtChars(c.chars)}ch/~${fmtChars(c.estTokens)}tok` : "unreadable").padEnd(17),
+        (c.recorded != null ? `${fmtChars(c.recorded)}tok` : "—").padEnd(12),
+        (c.name ?? "(unnamed)") + (c.mtimeMs === chats[0].mtimeMs ? "  ← most recent" : ""),
+      ].join("")
+    );
+  }
+  lines.push("─".repeat(70));
+  lines.push("transcript = raw user/assistant text size (tool calls are not stored). recorded = LM Studio's last counted prompt tokens for that chat.");
+  return { content: [{ type: "text", text: lines.join("\n") }] };
+}
+
+async function handleReadChat(args = {}) {
+  const { error, chat } = await resolveChat(args.chat);
+  if (error) return { content: [{ type: "text", text: `read_chat: ${error}` }] };
+  if (!chat.readable) {
+    return { content: [{ type: "text", text: `read_chat: chat ${chat.id} exists (${chat.name}) but its file couldn't be parsed right now (mid-write or corrupt). Try again in a moment.` }] };
+  }
+
+  let data;
+  try {
+    data = JSON.parse(await fs.readFile(chat.filePath, "utf-8"));
+  } catch (e) {
+    return { content: [{ type: "text", text: `read_chat: failed to read ${chat.filePath}: ${e.message}` }] };
+  }
+
+  const turns = extractTranscript(data);
+  const full = turns.map((t) => `### ${t.role}\n${t.text}`).join("\n\n");
+
+  let maxChars = Number(args.max_chars);
+  if (!Number.isFinite(maxChars) || maxChars < 1000) maxChars = 20000;
+  const capped = maxChars > READ_CHAT_MAX_CAP;
+  maxChars = Math.min(maxChars, READ_CHAT_MAX_CAP);
+
+  const from = ["start", "end", "split"].includes(args.from) ? args.from : "split";
+  const atChars = Number(args.at_chars);
+
+  let body, showing;
+  if (Number.isFinite(atChars) && atChars >= 0 && full.length > maxChars) {
+    // Window centered on an explicit offset (e.g. a search_chat hit)
+    let win = Number(args.context_chars);
+    if (!Number.isFinite(win) || win < 1000) win = 20000;
+    win = Math.min(win, READ_CHAT_MAX_CAP);
+    const start = Math.max(0, Math.min(Math.floor(atChars - win / 2), full.length - win));
+    body = full.slice(start, start + win);
+    showing = `chars ${start}–${start + win} (window of ${win} centered on offset ${Math.floor(atChars)})`;
+  } else if (full.length <= maxChars) {
+    body = full;
+    showing = `FULL transcript (${full.length} chars)`;
+  } else if (from === "start") {
+    body = full.slice(0, maxChars);
+    showing = `first ${maxChars} chars (oldest messages) — the rest is omitted`;
+  } else if (from === "end") {
+    body = full.slice(full.length - maxChars);
+    showing = `last ${maxChars} chars (newest messages) — the earlier part is omitted`;
+  } else {
+    const half = Math.floor(maxChars / 2);
+    const omitted = full.length - half * 2;
+    body =
+      full.slice(0, half) +
+      `\n\n[... ${omitted} chars omitted from the middle — call read_chat again with from:"start" or from:"end" (or a larger max_chars) to get the rest ...]\n\n` +
+      full.slice(full.length - half);
+    showing = `first ${half} + last ${half} chars (split) of ${full.length}`;
+  }
+
+  if (!body.trim()) {
+    return { content: [{ type: "text", text: `read_chat: chat ${chat.id} (${chat.name}) has no user/assistant text content.` }] };
+  }
+
+  const header = [
+    `CHAT RECALL — "${chat.name}"`,
+    `id: ${chat.id} | created: ${fmtDate(chat.createdAt)} | messages: ${chat.msgCount}`,
+    `full transcript: ${full.length} chars (~${fmtChars(Math.round(full.length / CHARS_PER_TOKEN_EST))} tokens)${chat.recorded != null ? ` | last recorded prompt size: ${chat.recorded} tokens` : ""}`,
+    typeof data.systemPrompt === "string" && data.systemPrompt.trim()
+      ? `system prompt used: ${data.systemPrompt.trim().slice(0, 200)}${data.systemPrompt.trim().length > 200 ? "… (truncated)" : ""}`
+      : "system prompt used: (none)",
+    `showing: ${showing}`,
+    "note: tool calls are not stored in these files (only their success status) — this is the complete user/assistant exchange.",
+    "─".repeat(70),
+  ];
+  return { content: [{ type: "text", text: [...header, body].join("\n") }] };
+}
+
+function searchTranscript(text, query, maxHits, contextChars) {
+  const needle = String(query).trim().toLowerCase();
+  if (!needle) return { total: 0, hits: [], error: "empty query" };
+  const hay = text.toLowerCase();
+  const step = Math.max(needle.length, 1);
+  const hits = [];
+  let total = 0;
+  let i = hay.indexOf(needle);
+  while (i !== -1) {
+    total++;
+    if (hits.length < maxHits) {
+      const a = Math.max(0, i - contextChars);
+      const b = Math.min(text.length, i + needle.length + contextChars);
+      const snippet =
+        (a > 0 ? "… " : "") +
+        text.slice(a, b).replace(/\s+/g, " ") +
+        (b < text.length ? " …" : "");
+      hits.push({ offset: i, snippet });
+    }
+    if (total >= 100000) break; // safety valve for tiny needles
+    i = hay.indexOf(needle, i + step);
+  }
+  return { total, hits };
+}
+
+async function handleSearchChat(args = {}) {
+  const { error, chat } = await resolveChat(args.chat);
+  if (error) return { content: [{ type: "text", text: `search_chat: ${error}` }] };
+  if (!chat.readable) {
+    return { content: [{ type: "text", text: `search_chat: chat ${chat.id} (${chat.name}) couldn't be parsed right now (mid-write or corrupt).` }] };
+  }
+  const query = String(args.query ?? "").trim();
+  if (!query) return { content: [{ type: "text", text: "search_chat: 'query' is required." }] };
+
+  let maxHits = Number(args.max_hits);
+  if (!Number.isFinite(maxHits) || maxHits < 1) maxHits = 10;
+  maxHits = Math.min(maxHits, 50);
+  let ctx = Number(args.context_chars);
+  if (!Number.isFinite(ctx) || ctx < 20) ctx = 250;
+  ctx = Math.min(ctx, 2000);
+
+  let data;
+  try {
+    data = JSON.parse(await fs.readFile(chat.filePath, "utf-8"));
+  } catch (e) {
+    return { content: [{ type: "text", text: `search_chat: failed to read ${chat.filePath}: ${e.message}` }] };
+  }
+  const full = extractTranscript(data).map((t) => `### ${t.role}\n${t.text}`).join("\n\n");
+
+  const { total, hits } = searchTranscript(full, query, maxHits, ctx);
+  if (total === 0) {
+    return { content: [{ type: "text", text: `search_chat: no occurrences of '${query}' in "${chat.name}" (${chat.id}, ${full.length} chars).` }] };
+  }
+
+  const lines = [
+    `SEARCH — '${query}' in "${chat.name}" (${chat.id})`,
+    `${total} total hit${total > 1 ? "s" : ""} — showing ${hits.length}`,
+    "─".repeat(70),
+  ];
+  hits.forEach((h, n) => {
+    lines.push(`[${n + 1}] @${h.offset}`);
+    lines.push(`    ${h.snippet}`);
+    lines.push("");
+  });
+  if (total > hits.length) lines.push(`${total - hits.length} more hit(s) not shown — raise max_hits (cap 50).`);
+  lines.push(`Read a window around a hit: read_chat(chat: "${chat.id}", at_chars: <offset>, context_chars: 4000–10000)`);
+  return { content: [{ type: "text", text: lines.join("\n") }] };
 }
 
 // ---------- Dispatcher ----------
@@ -762,6 +1147,18 @@ async function dispatchMnemonicTool(name, args = {}) {
       lines.push("Note: tokens_used is exact as of the last completed generation step; the current in-flight tool round-trip adds a small amount on top.");
 
       return { content: [{ type: "text", text: lines.join("\n") }] };
+    }
+
+    case "list_chats": {
+      return await handleListChats();
+    }
+
+    case "read_chat": {
+      return await handleReadChat(args);
+    }
+
+    case "search_chat": {
+      return await handleSearchChat(args);
     }
 
     default:
