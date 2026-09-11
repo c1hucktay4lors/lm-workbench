@@ -1,6 +1,6 @@
-# LM Workbench
+# LM Workbench (Testing Branch)
 
-All-in-one MCP server for LM Studio. File operations, bash, git, search, web, tasks, memory, and skills — in a single toolkit.
+This is the Testing Branch of LM Workbench, where I am experimenting with features I think would be cool to have in this toolkit. the rest of this readme will be updated to reflect some of those changes.
 
 ## What it is
 
