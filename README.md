@@ -161,7 +161,6 @@ lm-workbench/
 │       └── paths.js
 ├── skills/
 │   ├── code-review/
-│   ├── docx/
 │   ├── frontend-design/
 │   ├── mcp-builder/
 │   ├── react-best-practices/
