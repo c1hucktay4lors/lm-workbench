@@ -12,25 +12,50 @@ import path from "node:path";
 
 const BACKUP_RETENTION = 10;
 
-function resolveMemoryPath() {
-  // Allow override via env var for custom paths
-  if (process.env.MEMORY_FILE_PATH) return process.env.MEMORY_FILE_PATH;
-
+// Default memory location (dedicated per-user application-data directory):
+//   Linux:   $XDG_DATA_HOME/lm-workbench/memory/memory.md  (or ~/.local/share/...)
+//   Windows: %LOCALAPPDATA%\lm-workbench\memory\memory.md
+//   macOS:   ~/Library/Application Support/lm-workbench/memory/memory.md
+// The sync layer (bin/lm-memory-sync) syncs the directory containing this file,
+// i.e. the "memory directory", so memory.md and backups/ travel together.
+function defaultMemoryDir() {
   const homeDir = os.homedir();
-  const newDefault = path.join(homeDir, ".mcp-memory", "memory.md");
-
-  // Backward compat: fall back to old XDG-style location if it exists
-  const legacyPath = process.env.XDG_DATA_HOME || path.join(homeDir, ".local", "share", "mcp-memory");
-  const legacyFile = path.join(legacyPath, "memory.md");
-
-  try { fsSync.accessSync(newDefault); return newDefault; } catch {}
-  try { fsSync.accessSync(legacyFile); return legacyFile; } catch {}
-
-  // Neither exists yet — default to the simpler path going forward
-  return newDefault;
+  if (process.platform === "win32") {
+    const localAppData = process.env.LOCALAPPDATA || path.join(homeDir, "AppData", "Local");
+    return path.join(localAppData, "lm-workbench", "memory");
+  }
+  if (process.platform === "darwin") {
+    return path.join(homeDir, "Library", "Application Support", "lm-workbench", "memory");
+  }
+  // Linux / other Unix
+  const xdgData = process.env.XDG_DATA_HOME || path.join(homeDir, ".local", "share");
+  return path.join(xdgData, "lm-workbench", "memory");
 }
 
-const memoryFilePath = resolveMemoryPath();
+function resolveMemoryPath() {
+  // Explicit override always wins (also used to point the MCP server at a
+  // Google Drive for Desktop sync folder on Windows, or any custom location).
+  if (process.env.MEMORY_FILE_PATH) return process.env.MEMORY_FILE_PATH;
+
+  const preferred = path.join(defaultMemoryDir(), "memory.md");
+
+  // Backward compatibility: keep using an existing store from earlier
+  // versions instead of silently switching to an empty new location.
+  const legacyPaths = [
+    path.join(os.homedir(), ".mcp-memory", "memory.md"),
+    path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share"), "mcp-memory", "memory.md"),
+  ];
+
+  try { fsSync.accessSync(preferred); return preferred; } catch {}
+  for (const legacy of legacyPaths) {
+    try { fsSync.accessSync(legacy); return legacy; } catch {}
+  }
+
+  // Nothing exists yet — use the current default location.
+  return preferred;
+}
+
+export const memoryFilePath = resolveMemoryPath();
 
 // ---------- Smart Categorization ----------
 

@@ -1,0 +1,24 @@
+# User-level systemd timer — syncs the lm-workbench memory directory
+# periodically. Pair with lm-memory-sync.service.
+#
+# Interval: OnUnitInactiveSec below (default 5m). Change that one line to
+# taste (e.g. 1m or 10m) and run:  systemctl --user daemon-reload
+#
+# OnUnitInactiveSec = "run again N after the last run finished" — combined
+# with the service being a one-shot, this guarantees runs can never overlap.
+
+[Unit]
+Description=Periodic lm-workbench memory sync
+
+[Timer]
+# First sync shortly after boot/login...
+OnBootSec=2min
+# ...then every 5 minutes after a run finishes.
+OnUnitInactiveSec=5min
+# Don't jitter-sync into a tight burst.
+AccuracySec=1min
+# If the machine was suspended/off and a run was missed, do it once on wake.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

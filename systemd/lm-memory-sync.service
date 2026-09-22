@@ -1,0 +1,40 @@
+# User-level systemd service — runs the lm-workbench memory sync as the
+# normal user. No sudo, nothing installed globally.
+#
+# Install (see README "Automatic synchronization"):
+#   install -Dm644 lm-memory-sync.service ~/.config/systemd/user/
+#   install -Dm644 lm-memory-sync.timer   ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now lm-memory-sync.timer
+#
+# Per-user configuration lives in an optional env file (never committed to
+# the repo, never shared):
+#   ~/.config/lm-workbench/memory-sync.env
+# e.g.
+#   LM_MEMORY_SYNC_REMOTE=gdrive:lm-workbench/memory
+#   LM_MEMORY_SYNC_REPO=/path/to/your/lm-workbench-clone
+#   LM_MEMORY_SYNC_RCLONE=/usr/bin/rclone   # absolute path if rclone is not on PATH
+
+[Unit]
+Description=lm-workbench memory sync (rclone bisync to Google Drive)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Optional per-user configuration. The leading '-' means "ignore if missing".
+EnvironmentFile=-%h/.config/lm-workbench/memory-sync.env
+# Make sure rclone + node are findable under the (minimal) systemd PATH.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:%h/.local/bin
+# The repo location is machine-specific, so it comes from the env file
+# (LM_MEMORY_SYNC_REPO); the fallback below is a neutral, non-user-specific
+# default that the env file overrides.
+ExecStart=/usr/bin/env sh -c 'node "${LM_MEMORY_SYNC_REPO:-/opt/lm-workbench}/bin/lm-memory-sync.js"'
+# Be a well-behaved background job: low CPU/IO priority, bounded runtime.
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=10m
+# Never run two at once (systemd won't start a second oneshot while active),
+# and the sync script also takes its own lock as a second line of defense.
+ExecCondition=/usr/bin/env test -n "${LM_MEMORY_SYNC_REMOTE:-}"

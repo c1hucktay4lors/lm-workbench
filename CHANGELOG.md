@@ -8,10 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `lm-memory-sync` CLI for optional Google Drive synchronization of the memory directory via rclone bisync
+- systemd user service/timer templates for automatic periodic sync (`systemd/lm-memory-sync.service`, `.timer`)
 - code-review skill (general-purpose code review methodology: structure, style, security, performance, error handling)
 
 ### Changed
-- (nothing yet)
+- Default persistent memory location moved to per-user application-data directory:
+  - Linux: `~/.local/share/lm-workbench/memory/memory.md` (respects `$XDG_DATA_HOME`)
+  - Windows: `%LOCALAPPDATA%\lm-workbench\memory\memory.md`
+  - macOS: `~/Library/Application Support/lm-workbench/memory/memory.md`
+- Existing stores at `~/.mcp-memory/memory.md` and `~/.local/share/mcp-memory/memory.md` continue to work via backward-compatibility fallback
 
 ### Fixed
 - (nothing yet)

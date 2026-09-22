@@ -64,13 +64,68 @@ Stored under:
 
 ### Persistent memory
 
-Structured long-term memory stored in:
+Structured long-term memory stored in a per-user application-data directory:
 
-`~/.mcp-memory/memory.md`
+- **Linux:** `~/.local/share/lm-workbench/memory/memory.md` (respects `$XDG_DATA_HOME`)
+- **Windows:** `%LOCALAPPDATA%\lm-workbench\memory\memory.md`
+- **macOS:** `~/Library/Application Support/lm-workbench/memory/memory.md`
 
-Memory supports sections, keyword-based categorization, deduplication, backup rotation, searching, and cleanup.
+Override with the `MEMORY_FILE_PATH` environment variable. Existing stores at `~/.mcp-memory/memory.md` or `~/.local/share/mcp-memory/memory.md` continue to work automatically until the new location exists (then the new location wins).
 
-The `context_status` tool reads LM Studio's actual conversation files to report real token usage rather than estimating it (this is a bit spotty on if the model calls it naturally, still working on it. But does work if you tell it to check context status).
+Memory supports sections, keyword-based categorization, deduplication, backup rotation (10 backups kept), searching, and cleanup.
+
+The `context_status` tool reads LM Studio's actual conversation files to report real token usage rather than estimating it.
+
+### Shared memory across devices (optional)
+
+The `lm-memory-sync` CLI keeps your local memory directory in sync with a configured rclone remote (typically Google Drive). The MCP memory tools are untouched — they always read/write the local file, and sync runs independently (manually or via systemd timer).
+
+**Architecture:**
+```
+MCP memory tools → local memory.md → periodic lm-memory-sync → Google Drive → other devices
+```
+
+**Setup (Linux):**
+
+1. Install rclone: `pacman -S rclone` (or download from https://rclone.org)
+2. Configure your Google Drive remote: `rclone config` (name it whatever you like, e.g. `gdrive`)
+3. Set the sync remote in your shell profile or systemd unit:
+   ```bash
+   export LM_MEMORY_SYNC_REMOTE="gdrive:lm-workbench/memory"
+   ```
+4. First-run initialization (pick the source of truth):
+   - Upload local memory to empty remote: `lm-memory-sync --init --from-local`
+   - Download remote memory to new machine: `lm-memory-sync --init --from-remote`
+5. Normal sync: `lm-memory-sync` (no flags needed)
+
+**Automatic synchronization (systemd user timer):**
+
+```bash
+install -Dm644 systemd/lm-memory-sync.service ~/.config/systemd/user/
+install -Dm644 systemd/lm-memory-sync.timer   ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now lm-memory-sync.timer
+```
+
+The timer runs every 5 minutes (edit `OnUnitInactiveSec` in the `.timer` file to change). Per-user configuration goes in `~/.config/lm-workbench/memory-sync.env`:
+```bash
+LM_MEMORY_SYNC_REMOTE=gdrive:lm-workbench/memory
+LM_MEMORY_SYNC_REPO=/path/to/your/lm-workbench-clone
+```
+
+**Windows:** Use Google Drive for Desktop to sync a local folder, then set `MEMORY_FILE_PATH` to point at that folder. No rclone needed.
+
+**Conflict handling:** If memory.md changes on two machines between syncs, bisync keeps BOTH versions as `memory.md.conflict1` and `memory.md.conflict2`. Compare, merge into memory.md, delete the conflict copies. Nothing is ever silently dropped.
+
+**Recovery:** If a sync reports a critical abort:
+```bash
+lm-memory-sync --status      # check state
+lm-memory-sync --recover     # read-only diagnosis
+lm-memory-sync --check       # dry-run preview of recovery
+lm-memory-sync --recover --apply  # actually recover (local wins)
+```
+
+**CLI reference:** `lm-memory-sync --help`
 
 ## Skills system
 

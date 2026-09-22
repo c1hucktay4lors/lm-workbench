@@ -5,11 +5,13 @@
   "type": "module",
   "main": "src/index.js",
   "bin": {
-    "lm-workbench": "./src/index.js"
+    "lm-workbench": "./src/index.js",
+    "lm-memory-sync": "./bin/lm-memory-sync.js"
   },
   "scripts": {
     "mcp": "node src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test": "node test/memory-sync.test.mjs"
   },
   "keywords": [
     "mcp",
